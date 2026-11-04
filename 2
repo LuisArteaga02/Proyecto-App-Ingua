@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Función para verificar si el usuario está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Función para obtener los datos del usuario actual desde la colección 'usuarios'
+    function getUserData() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    // Verificar si es administrador
+    function isAdmin() {
+      return isAuthenticated() && getUserData().rol == 'admin' && getUserData().activo == true;
+    }
+
+    // Verificar si es profesor activo
+    function isProfesor() {
+      return isAuthenticated() && (getUserData().rol == 'profesor' || getUserData().rol == 'admin') && getUserData().activo == true;
+    }
+
+    // Reglas para la colección de Usuarios
+    match /usuarios/{userId} {
+      allow read: if isAuthenticated();
+      // Solo los admins pueden crear/editar usuarios, o un usuario creando su propio perfil inicial
+      allow create, update: if isAdmin() || request.auth.uid == userId;
+      allow delete: if isAdmin();
+    }
+
+    // Reglas para Alumnos
+    match /alumnos/{alumnoId} {
+      allow read: if isAuthenticated();
+      // Profesores y admins pueden registrar o actualizar datos de alumnos (ej. sumar deméritos)
+      allow write: if isProfesor();
+    }
+
+    // Reglas para Reportes / Deméritos
+    match /reportes/{reporteId} {
+      allow read: if isAuthenticated();
+      // Cualquier profesor activo puede crear un reporte
+      allow create: if isProfesor() && request.resource.data.profesorId == request.auth.uid;
+      // Solo admin o el mismo profesor que lo creó puede modificarlo/borrarlo (opcional)
+      allow update, delete: if isAdmin() || resource.data.profesorId == request.auth.uid;
+    }
+  }
+}

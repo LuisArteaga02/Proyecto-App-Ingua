@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "928889042506",
+    "project_id": "inguademeritos",
+    "storage_bucket": "inguademeritos.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:928889042506:android:fbb80530a130365ca298b3",
+        "android_client_info": {
+          "package_name": "com.example.ingua"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyATsgEoymDWqi_gqxX38Hub8zzts53wk58"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
