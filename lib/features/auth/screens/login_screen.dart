@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../dashboards/dashboard_screen.dart';
+import '../../alumnos/screens/alumnos_screen.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -35,24 +38,48 @@ class _LoginScreenState extends State<LoginScreen> {
           .doc(userCredential.user!.uid)
           .get();
 
-      if (!userDoc.exists) {
-        throw 'El usuario no está registrado en la base de datos institucional.';
-      }
+      if (userDoc.exists) {
+        final data = userDoc.data() as Map<String, dynamic>;
+        final role = data['role'];
+        final status = data['status'] ?? 'approved';
 
-      String role = userDoc.get('role') ?? 'professor';
+        // Validar si el profesor está pendiente de aprobación
+        if (role == 'professor' && status == 'pending') {
+          await FirebaseAuth.instance.signOut(); // Desconectar sesión temporal
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Tu cuenta está pendiente de aprobación por el Administrador.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
 
-      if (!mounted) return;
-
-      // 3. Redirigir según el rol
-      if (role == 'admin') {
-        // Navegar al AdminDashboard (puedes cambiarlo por tu ruta)
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bienvenido, Administrador 🚀')),
-        );
+        // 3. Redirigir según el rol (admin, professor o guest)
+        if (role == 'admin' || role == 'professor') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const DashboardScreen(),
+            ),
+          );
+        } else if (role == 'guest') {
+          // Invitados entran a la misma pantalla pero con permisos bloqueados de lectura
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const DashboardScreen(),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Rol no reconocido en el sistema')),
+          );
+        }
       } else {
-        // Navegar al ProfessorDashboard
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bienvenido, Profesor 📚')),
+          const SnackBar(content: Text('El usuario no existe en la base de datos')),
         );
       }
 
@@ -148,6 +175,24 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         child: const Text('Iniciar Sesión', style: TextStyle(fontSize: 16)),
                       ),
+
+                const SizedBox(height: 15),
+
+                // Botón para redirigir a la pantalla de registro
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RegisterScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    '¿No tienes una cuenta? Regístrate aquí',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
               ],
             ),
           ),

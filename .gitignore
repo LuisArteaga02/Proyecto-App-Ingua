@@ -50,6 +50,8 @@ node_modules/
 # Optional npm cache directory
 .npm
 
+build/
+
 # Optional eslint cache
 .eslintcache
 
@@ -67,3 +69,4 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+build/

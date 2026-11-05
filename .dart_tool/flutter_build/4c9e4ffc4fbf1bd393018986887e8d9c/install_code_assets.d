@@ -1,1 +1,0 @@
- /home/aderm/Documentos/Proyecto-App-Ingua/.dart_tool/flutter_build/4c9e4ffc4fbf1bd393018986887e8d9c/native_assets.json: 
