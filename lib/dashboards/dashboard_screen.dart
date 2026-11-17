@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../features/alumnos/screens/alumnos_screen.dart';
 import '../features/reportes/screens/reportes_screen.dart';
+import '../features/auth/screens/admin_approvals_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -43,266 +44,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // MODAL DE CREACIÓN RÁPIDA DE FALTA/DEMÉRITO DIRECTO EN EL DASHBOARD
-  void _mostrarCrearReporteModal() {
-    if (_userRole == 'guest') return;
-
-    final TextEditingController razonController = TextEditingController();
-    final TextEditingController descripcionController = TextEditingController();
-    final TextEditingController buscarAlumnoController = TextEditingController();
-
-    String tipoSeleccionado = 'Falta Leve';
-    final List<String> tiposDisponibles = ['Falta Leve', 'Falta Grave', 'Demerito'];
-    List<String> alumnosSeleccionados = [];
-
-    String filtroGradoModal = 'Todos';
-    String filtroBusquedaModal = '';
-    final List<String> gradosModalLista = [
-      'Todos',
-      'Primero General',
-      'Segundo General',
-      'Primero Técnico',
-      'Segundo Técnico',
-      'Tercero Técnico',
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: _cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setStateModal) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                left: 24,
-                right: 24,
-                top: 24,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Nuevo Reporte de Falta / Demérito',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _accentColor),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 20),
-                    TextField(
-                      controller: razonController,
-                      style: TextStyle(color: _accentColor),
-                      decoration: InputDecoration(
-                        labelText: 'Razón de la falta',
-                        labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
-                        filled: true,
-                        fillColor: _darkCardColor,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    DropdownButtonFormField<String>(
-                      value: tipoSeleccionado,
-                      dropdownColor: _darkCardColor,
-                      style: TextStyle(color: _accentColor),
-                      decoration: InputDecoration(
-                        labelText: 'Tipo',
-                        labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
-                        filled: true,
-                        fillColor: _darkCardColor,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      ),
-                      items: tiposDisponibles.map((String tipo) {
-                        return DropdownMenuItem<String>(
-                          value: tipo,
-                          child: Text(tipo, style: TextStyle(color: _accentColor)),
-                        );
-                      }).toList(),
-                      onChanged: (String? nuevoValor) {
-                        if (nuevoValor != null) {
-                          setStateModal(() => tipoSeleccionado = nuevoValor);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: descripcionController,
-                      style: TextStyle(color: _accentColor),
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        labelText: 'Descripción detallada',
-                        labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
-                        filled: true,
-                        fillColor: _darkCardColor,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Alumnos Implicados:',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: _accentColor, fontSize: 14),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: buscarAlumnoController,
-                      style: TextStyle(color: _accentColor, fontSize: 13),
-                      onChanged: (value) {
-                        setStateModal(() {
-                          filtroBusquedaModal = value.toLowerCase().trim();
-                        });
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'Buscar alumno por nombre o carnet...',
-                        hintStyle: TextStyle(color: _accentColor.withOpacity(0.5)),
-                        prefixIcon: Icon(Icons.search, color: _accentColor, size: 20),
-                        filled: true,
-                        fillColor: _darkCardColor,
-                        isDense: true,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: filtroGradoModal,
-                      dropdownColor: _darkCardColor,
-                      style: TextStyle(color: _accentColor, fontSize: 13),
-                      decoration: InputDecoration(
-                        labelText: 'Filtrar por grado',
-                        labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
-                        filled: true,
-                        fillColor: _darkCardColor,
-                        isDense: true,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                      ),
-                      items: gradosModalLista.map((String grado) {
-                        return DropdownMenuItem<String>(
-                          value: grado,
-                          child: Text(grado, style: TextStyle(color: _accentColor)),
-                        );
-                      }).toList(),
-                      onChanged: (String? nuevoValor) {
-                        if (nuevoValor != null) {
-                          setStateModal(() => filtroGradoModal = nuevoValor);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      height: 140,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: _darkCardColor,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance.collection('alumnos').orderBy('nombre').snapshots(),
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                            
-                            final alumnosDocs = snapshot.data!.docs.where((doc) {
-                              final data = doc.data() as Map<String, dynamic>;
-                              final nombre = (data['nombre'] ?? '').toLowerCase();
-                              final carnet = (data['carnet'] ?? '').toLowerCase();
-                              final gradoAlumno = (data['grado'] ?? '');
-
-                              bool cumpleGrado = filtroGradoModal == 'Todos' || gradoAlumno.contains(filtroGradoModal);
-                              bool cumpleBusq = nombre.contains(filtroBusquedaModal) || carnet.contains(filtroBusquedaModal);
-
-                              return cumpleGrado && cumpleBusq;
-                            }).toList();
-
-                            if (alumnosDocs.isEmpty) {
-                              return Center(
-                                child: Text('No se encontraron alumnos', style: TextStyle(color: _accentColor.withOpacity(0.6), fontSize: 13)),
-                              );
-                            }
-
-                            return ListView.builder(
-                              itemCount: alumnosDocs.length,
-                              itemBuilder: (context, index) {
-                                final doc = alumnosDocs[index];
-                                final data = doc.data() as Map<String, dynamic>;
-                                final alumnoId = doc.id;
-                                final isSelected = alumnosSeleccionados.contains(alumnoId);
-
-                                return CheckboxListTile(
-                                  title: Text(data['nombre'] ?? '', style: TextStyle(color: _accentColor, fontSize: 13)),
-                                  subtitle: Text(data['grado'] ?? '', style: TextStyle(color: _accentColor.withOpacity(0.6), fontSize: 11)),
-                                  value: isSelected,
-                                  activeColor: _accentColor,
-                                  checkColor: _cardColor,
-                                  dense: true,
-                                  onChanged: (bool? value) {
-                                    setStateModal(() {
-                                      if (value == true) {
-                                        alumnosSeleccionados.add(alumnoId);
-                                      } else {
-                                        alumnosSeleccionados.remove(alumnoId);
-                                      }
-                                    });
-                                  },
-                                );
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _accentColor,
-                        foregroundColor: _cardColor,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: () async {
-                        final razon = razonController.text.trim();
-                        final descripcion = descripcionController.text.trim();
-
-                        if (razon.isEmpty || alumnosSeleccionados.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Escribe una razón y selecciona al menos un alumno')),
-                          );
-                          return;
-                        }
-
-                        final alumnosQuery = await FirebaseFirestore.instance.collection('alumnos').get();
-                        List<String> nombresAlumnos = [];
-                        for (var doc in alumnosQuery.docs) {
-                          if (alumnosSeleccionados.contains(doc.id)) {
-                            final data = doc.data();
-                            nombresAlumnos.add(data['nombre'] ?? '');
-                          }
-                        }
-
-                        await FirebaseFirestore.instance.collection('reportes').add({
-                          'razon': razon,
-                          'tipo': tipoSeleccionado,
-                          'descripcion': descripcion,
-                          'alumnosIds': alumnosSeleccionados,
-                          'alumnosNombres': nombresAlumnos,
-                          'createdAt': FieldValue.serverTimestamp(),
-                        });
-
-                        if (!mounted) return;
-                        Navigator.pop(context);
-                      },
-                      child: const Text('Guardar Reporte', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
+  
 
   @override
   Widget build(BuildContext context) {
@@ -369,6 +111,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   );
                 },
               ),
+
+               const SizedBox(height: 12,),
+
+             if (_userRole == 'admin')
+
+             _buildDrawerItem(
+              icon: Icons.menu_book,
+              title: 'Gestion Administrador',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AdminApprovalsScreen()),
+                );
+                },
+            ),
+            
               const SizedBox(height: 16),
               _buildDrawerItem(
                 icon: Icons.assignment,
@@ -575,6 +334,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  // FUNCIÓN DE ACCESO RÁPIDO PARA ABRIR EL MODAL DE REGISTRO DE FALTAS / DEMÉRITOS
+  void _mostrarCrearReporteModal() {
+    if (_userRole == 'guest') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tu cuenta es de invitado y solo tiene modo de lectura.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Puedes navegar directamente a la pantalla de reportes donde se despliega el modal,
+    // o invocar el diálogo directamente si tienes las referencias a Firestore (_tiposFaltaRef, _razonesRef, etc.) en esta vista.
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ReportesScreen(),
       ),
     );
   }

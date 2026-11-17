@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../alumnos/screens/alumnos_screen.dart';
+import '../../auth/screens/admin_approvals_screen.dart';
 
 class ReportesScreen extends StatefulWidget {
   const ReportesScreen({super.key});
@@ -16,19 +17,17 @@ class _ReportesScreenState extends State<ReportesScreen> {
   String _userRole = 'guest';
   String _userEmail = '';
 
-  // Filtro de grado seleccionado desde el menú lateral
   String _gradoSeleccionadoFiltro = 'Todos';
 
   final List<String> _gradosFiltros = [
     'Todos',
-    'Tercero Técnico',
+    'Tercer Técnico',
     'Segundo Técnico',
-    'Primero Técnico',
+    'Primer Técnico',
     'Segundo General',
     'Primero General',
   ];
 
-  // Paleta de colores corporativa
   final Color _bgColor = const Color(0xFF1A1617);
   final Color _cardColor = const Color(0xFF4A2E35);
   final Color _accentColor = const Color(0xFFF2D6BD);
@@ -61,21 +60,21 @@ class _ReportesScreenState extends State<ReportesScreen> {
     super.dispose();
   }
 
-  final CollectionReference _reportesRef =
-      FirebaseFirestore.instance.collection('reportes');
-  final CollectionReference _alumnosRef =
-      FirebaseFirestore.instance.collection('alumnos');
+  final CollectionReference _reportesRef = FirebaseFirestore.instance.collection('reportes');
+  final CollectionReference _alumnosRef = FirebaseFirestore.instance.collection('alumnos');
+  final CollectionReference _tiposFaltaRef = FirebaseFirestore.instance.collection('tipos_falta');
+  final CollectionReference _razonesRef = FirebaseFirestore.instance.collection('razones_falta');
 
-  // MODAL PARA MOSTRAR DETALLES EXTENSOS DEL REPORTE, ALUMNOS Y EL AUTOR
+  // MODAL PARA MOSTRAR DETALLES EXTENSOS DEL REPORTE
   void _mostrarDetalleReporte(Map<String, dynamic> data) {
     final List<dynamic> nombresAlumnos = data['alumnosNombres'] ?? [];
     final String tipo = data['tipo'] ?? 'Falta Leve';
     final String publicadoPor = data['creadoPor'] ?? 'No especificado';
 
     Color badgeColor;
-    if (tipo == 'Demerito') {
+    if (tipo.toLowerCase().contains('demerito') || tipo.toLowerCase().contains('demérito')) {
       badgeColor = Colors.redAccent;
-    } else if (tipo == 'Falta Grave') {
+    } else if (tipo.toLowerCase().contains('grave')) {
       badgeColor = Colors.orangeAccent;
     } else {
       badgeColor = Colors.amber;
@@ -95,7 +94,6 @@ class _ReportesScreenState extends State<ReportesScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Encabezado con Razón y Tipo
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -103,12 +101,15 @@ class _ReportesScreenState extends State<ReportesScreen> {
                     child: Text(
                       data['razon'] ?? 'Sin Razón',
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: _accentColor,
                       ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
@@ -118,14 +119,12 @@ class _ReportesScreenState extends State<ReportesScreen> {
                     ),
                     child: Text(
                       tipo,
-                      style: TextStyle(color: badgeColor, fontWeight: FontWeight.bold, fontSize: 12),
+                      style: TextStyle(color: badgeColor, fontWeight: FontWeight.bold, fontSize: 11),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-
-              // MOSTRAR EL USUARIO QUE PUBLICÓ EL REPORTE
               Row(
                 children: [
                   Icon(Icons.person_pin, color: _accentColor.withOpacity(0.8), size: 18),
@@ -144,8 +143,6 @@ class _ReportesScreenState extends State<ReportesScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-
-              // Alumnos implicados en tarjetas visuales
               Text(
                 'Alumnos Involucrados:',
                 style: TextStyle(color: _accentColor, fontWeight: FontWeight.bold, fontSize: 14),
@@ -184,8 +181,6 @@ class _ReportesScreenState extends State<ReportesScreen> {
                 }).toList(),
               ),
               const SizedBox(height: 18),
-
-              // Descripción Detallada
               Text(
                 'Descripción del Incidente:',
                 style: TextStyle(color: _accentColor, fontWeight: FontWeight.bold, fontSize: 14),
@@ -206,8 +201,6 @@ class _ReportesScreenState extends State<ReportesScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-
-              // Botón de cerrar
               Align(
                 alignment: Alignment.centerRight,
                 child: ElevatedButton(
@@ -226,18 +219,84 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
-  // Diálogo para Crear o Editar un Reporte
+  // DIÁLOGO PARA CREAR NUEVO TIPO O RAZÓN CON CAPEO AMPLIADO A 300 CARACTERES
+  void _mostrarDialogoAgregarOpcion({required bool esTipoFalta, String? tipoFaltaAsociado}) {
+    final TextEditingController controladorInput = TextEditingController();
+    bool guardandoOpcion = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          backgroundColor: _cardColor,
+          title: Text(
+            esTipoFalta ? 'Agregar Nuevo Tipo de Falta' : 'Agregar Nueva Razón',
+            style: TextStyle(color: _accentColor, fontSize: 18),
+          ),
+          content: TextField(
+            controller: controladorInput,
+            style: TextStyle(color: _accentColor),
+            maxLines: 3,
+            maxLength: 300, // Límite ampliado a 300 caracteres
+            decoration: InputDecoration(
+              labelText: esTipoFalta ? 'Nombre (ej. Falta Gravísima)' : 'Razón detallada...',
+              labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
+              filled: true,
+              fillColor: _darkCardColor,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: guardandoOpcion ? null : () => Navigator.pop(context),
+              child: Text('Cancelar', style: TextStyle(color: _accentColor.withOpacity(0.6))),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: _accentColor, foregroundColor: _cardColor),
+              onPressed: guardandoOpcion
+                  ? null
+                  : () async {
+                      final texto = controladorInput.text.trim();
+                      if (texto.isEmpty) return;
+
+                      setStateDialog(() => guardandoOpcion = true);
+
+                      if (esTipoFalta) {
+                        await _tiposFaltaRef.add({'nombre': texto});
+                      } else {
+                        await _razonesRef.add({
+                          'tipoFalta': tipoFaltaAsociado,
+                          'razon': texto,
+                        });
+                      }
+
+                      if (!mounted) return;
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('¡Opción agregada exitosamente!')),
+                      );
+                    },
+              child: guardandoOpcion
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // DIÁLOGO PRINCIPAL CON COMBO BOX DINÁMICO Y PROTECCIÓN CONTRA DOBLE CLIC
   void _showReporteDialog({String? docId, Map<String, dynamic>? currentData}) {
     if (_userRole == 'guest') return;
 
-    final TextEditingController razonController =
-        TextEditingController(text: currentData?['razon'] ?? '');
     final TextEditingController descripcionController =
         TextEditingController(text: currentData?['descripcion'] ?? '');
     final TextEditingController buscarAlumnoModalController = TextEditingController();
 
-    String tipoSeleccionado = currentData?['tipo'] ?? 'Falta Leve';
-    final List<String> tiposDisponibles = ['Falta Leve', 'Falta Grave', 'Demerito'];
+    String? tipoSeleccionado = currentData?['tipo'];
+    String? razonSeleccionada = currentData?['razon'];
+    bool guardandoReporte = false;
 
     List<String> alumnosSeleccionados = [];
     if (currentData != null && currentData['alumnosIds'] != null) {
@@ -283,42 +342,180 @@ class _ReportesScreenState extends State<ReportesScreen> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 20),
-                    TextField(
-                      controller: razonController,
-                      style: TextStyle(color: _accentColor),
-                      decoration: InputDecoration(
-                        labelText: 'Razón (ej. Llegar tarde, Vestimenta)',
-                        labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
-                        filled: true,
-                        fillColor: _darkCardColor,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    DropdownButtonFormField<String>(
-                      value: tipoSeleccionado,
-                      dropdownColor: _darkCardColor,
-                      style: TextStyle(color: _accentColor),
-                      decoration: InputDecoration(
-                        labelText: 'Tipo',
-                        labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
-                        filled: true,
-                        fillColor: _darkCardColor,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      ),
-                      items: tiposDisponibles.map((String tipo) {
-                        return DropdownMenuItem<String>(
-                          value: tipo,
-                          child: Text(tipo, style: TextStyle(color: _accentColor)),
-                        );
-                      }).toList(),
-                      onChanged: (String? nuevoValor) {
-                        if (nuevoValor != null) {
-                          setStateModal(() => tipoSeleccionado = nuevoValor);
+
+                    // COMBO BOX TIPO DE FALTA (Completo al abrir / Ajustado al cerrar)
+                    StreamBuilder<QuerySnapshot>(
+                      stream: _tiposFaltaRef.snapshots(),
+                      builder: (context, snapshot) {
+                        List<String> listaNombresTipos = [];
+                        if (snapshot.hasData) {
+                          for (var doc in snapshot.data!.docs) {
+                            final nombre = doc['nombre'] ?? '';
+                            if (nombre.isNotEmpty) listaNombresTipos.add(nombre);
+                          }
                         }
+
+                        if ((tipoSeleccionado == null || !listaNombresTipos.contains(tipoSeleccionado)) &&
+                            listaNombresTipos.isNotEmpty) {
+                          tipoSeleccionado = listaNombresTipos.first;
+                        }
+
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                value: tipoSeleccionado,
+                                dropdownColor: _darkCardColor,
+                                style: TextStyle(color: _accentColor),
+                                isExpanded: true,
+                                menuMaxHeight: 300,
+                                decoration: InputDecoration(
+                                  labelText: 'Tipo de Falta',
+                                  labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
+                                  filled: true,
+                                  fillColor: _darkCardColor,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                                selectedItemBuilder: (BuildContext context) {
+                                  return listaNombresTipos.map<Widget>((String item) {
+                                    return Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        item,
+                                        style: TextStyle(color: _accentColor),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    );
+                                  }).toList();
+                                },
+                                items: listaNombresTipos.map<DropdownMenuItem<String>>((String item) {
+                                  return DropdownMenuItem<String>(
+                                    value: item,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                      child: Text(
+                                        item,
+                                        style: TextStyle(color: _accentColor, fontSize: 14),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (nuevoValor) {
+                                  setStateModal(() {
+                                    tipoSeleccionado = nuevoValor;
+                                    razonSeleccionada = null;
+                                  });
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: Icon(Icons.add_circle, color: _accentColor, size: 30),
+                              tooltip: 'Añadir nuevo tipo',
+                              onPressed: () => _mostrarDialogoAgregarOpcion(esTipoFalta: true),
+                            ),
+                          ],
+                        );
                       },
                     ),
                     const SizedBox(height: 14),
+
+                    // COMBO BOX RAZÓN ESPECÍFICA (Completo al abrir / Ajustado al cerrar)
+                    StreamBuilder<QuerySnapshot>(
+                      stream: _razonesRef.where('tipoFalta', isEqualTo: tipoSeleccionado).snapshots(),
+                      builder: (context, snapshot) {
+                        List<String> listaNombresRazones = [];
+                        if (snapshot.hasData) {
+                          for (var doc in snapshot.data!.docs) {
+                            final razon = doc['razon'] ?? '';
+                            if (razon.isNotEmpty) listaNombresRazones.add(razon);
+                          }
+                        }
+
+                        if ((razonSeleccionada == null || !listaNombresRazones.contains(razonSeleccionada)) &&
+                            listaNombresRazones.isNotEmpty) {
+                          razonSeleccionada = listaNombresRazones.first;
+                        }
+
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                value: listaNombresRazones.contains(razonSeleccionada) ? razonSeleccionada : null,
+                                dropdownColor: _darkCardColor,
+                                style: TextStyle(color: _accentColor),
+                                isExpanded: true,
+                                menuMaxHeight: 350,
+                                decoration: InputDecoration(
+                                  labelText: 'Razón Específica',
+                                  labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
+                                  filled: true,
+                                  fillColor: _darkCardColor,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                                selectedItemBuilder: (BuildContext context) {
+                                  return listaNombresRazones.map<Widget>((String item) {
+                                    return Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        item,
+                                        style: TextStyle(color: _accentColor),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    );
+                                  }).toList();
+                                },
+                                items: listaNombresRazones.map<DropdownMenuItem<String>>((String item) {
+                                  return DropdownMenuItem<String>(
+                                    value: item,
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                      decoration: BoxDecoration(
+                                        border: Border(
+                                          bottom: BorderSide(
+                                            color: _accentColor.withOpacity(0.15),
+                                            width: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        item,
+                                        style: TextStyle(color: _accentColor, fontSize: 13.5),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (nuevoValor) {
+                                  setStateModal(() => razonSeleccionada = nuevoValor);
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: Icon(Icons.add_circle, color: _accentColor, size: 30),
+                              tooltip: 'Añadir nueva razón',
+                              onPressed: tipoSeleccionado == null
+                                  ? null
+                                  : () => _mostrarDialogoAgregarOpcion(
+                                        esTipoFalta: false,
+                                        tipoFaltaAsociado: tipoSeleccionado,
+                                      ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
                     TextField(
                       controller: descripcionController,
                       style: TextStyle(color: _accentColor),
@@ -360,6 +557,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
                       value: filtroGradoModal,
                       dropdownColor: _darkCardColor,
                       style: TextStyle(color: _accentColor, fontSize: 13),
+                      isExpanded: true,
                       decoration: InputDecoration(
                         labelText: 'Filtrar por grado',
                         labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
@@ -371,7 +569,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
                       items: gradosModalLista.map((String grado) {
                         return DropdownMenuItem<String>(
                           value: grado,
-                          child: Text(grado, style: TextStyle(color: _accentColor)),
+                          child: Text(grado, style: TextStyle(color: _accentColor), overflow: TextOverflow.ellipsis),
                         );
                       }).toList(),
                       onChanged: (String? nuevoValor) {
@@ -423,8 +621,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
                                 final isSelected = alumnosSeleccionados.contains(alumnoId);
 
                                 return CheckboxListTile(
-                                  title: Text(alumnoNombre, style: TextStyle(color: _accentColor, fontSize: 13)),
-                                  subtitle: Text(alumnoGrado, style: TextStyle(color: _accentColor.withOpacity(0.6), fontSize: 11)),
+                                  title: Text(alumnoNombre, style: TextStyle(color: _accentColor, fontSize: 13), overflow: TextOverflow.ellipsis),
+                                  subtitle: Text(alumnoGrado, style: TextStyle(color: _accentColor.withOpacity(0.6), fontSize: 11), overflow: TextOverflow.ellipsis),
                                   value: isSelected,
                                   activeColor: _accentColor,
                                   checkColor: _cardColor,
@@ -446,6 +644,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    
+                    // BOTÓN DE GUARDAR PROTEGIDO CONTRA DOBLE CLIC (LOADING / DEBOUNCE)
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _accentColor,
@@ -453,55 +653,69 @@ class _ReportesScreenState extends State<ReportesScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      onPressed: () async {
-                        final razon = razonController.text.trim();
-                        final descripcion = descripcionController.text.trim();
+                      onPressed: guardandoReporte
+                          ? null
+                          : () async {
+                              final descripcion = descripcionController.text.trim();
 
-                        if (razon.isEmpty || alumnosSeleccionados.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Escribe una razón y selecciona al menos un alumno')),
-                          );
-                          return;
-                        }
+                              if (razonSeleccionada == null || alumnosSeleccionados.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Selecciona una razón y al menos un alumno')),
+                                );
+                                return;
+                              }
 
-                        final alumnosQuery = await _alumnosRef.get();
-                        List<String> nombresAlumnos = [];
-                        for (var doc in alumnosQuery.docs) {
-                          if (alumnosSeleccionados.contains(doc.id)) {
-                            final data = doc.data() as Map<String, dynamic>;
-                            nombresAlumnos.add(data['nombre'] ?? '');
-                          }
-                        }
+                              setStateModal(() => guardandoReporte = true);
 
-                        if (docId == null) {
-                          // AL CREAR UN REPORTE NUEVO, SE GUARDA EL EMAIL DEL AUTOR
-                          await _reportesRef.add({
-                            'razon': razon,
-                            'tipo': tipoSeleccionado,
-                            'descripcion': descripcion,
-                            'alumnosIds': alumnosSeleccionados,
-                            'alumnosNombres': nombresAlumnos,
-                            'creadoPor': _userEmail,
-                            'createdAt': FieldValue.serverTimestamp(),
-                          });
-                        } else {
-                          // AL ACTUALIZAR, CONSERVAMOS LOS DATOS Y SOLO ACTUALIZAMOS LOS CAMPOS EDITADOS
-                          await _reportesRef.doc(docId).update({
-                            'razon': razon,
-                            'tipo': tipoSeleccionado,
-                            'descripcion': descripcion,
-                            'alumnosIds': alumnosSeleccionados,
-                            'alumnosNombres': nombresAlumnos,
-                          });
-                        }
+                              try {
+                                final alumnosQuery = await _alumnosRef.get();
+                                List<String> nombresAlumnos = [];
+                                for (var doc in alumnosQuery.docs) {
+                                  if (alumnosSeleccionados.contains(doc.id)) {
+                                    final data = doc.data() as Map<String, dynamic>;
+                                    nombresAlumnos.add(data['nombre'] ?? '');
+                                  }
+                                }
 
-                        if (!mounted) return;
-                        Navigator.pop(context);
-                      },
-                      child: Text(
-                        docId == null ? 'Guardar Reporte' : 'Actualizar Reporte',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
+                                if (docId == null) {
+                                  await _reportesRef.add({
+                                    'razon': razonSeleccionada,
+                                    'tipo': tipoSeleccionado ?? 'Falta Leve',
+                                    'descripcion': descripcion,
+                                    'alumnosIds': alumnosSeleccionados,
+                                    'alumnosNombres': nombresAlumnos,
+                                    'creadoPor': _userEmail,
+                                    'createdAt': FieldValue.serverTimestamp(),
+                                  });
+                                } else {
+                                  await _reportesRef.doc(docId).update({
+                                    'razon': razonSeleccionada,
+                                    'tipo': tipoSeleccionado ?? 'Falta Leve',
+                                    'descripcion': descripcion,
+                                    'alumnosIds': alumnosSeleccionados,
+                                    'alumnosNombres': nombresAlumnos,
+                                  });
+                                }
+
+                                if (!mounted) return;
+                                Navigator.pop(context);
+                              } catch (e) {
+                                setStateModal(() => guardandoReporte = false);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Error al guardar: $e')),
+                                );
+                              }
+                            },
+                      child: guardandoReporte
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(
+                              docId == null ? 'Guardar Reporte' : 'Actualizar Reporte',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
                     ),
                   ],
                 ),
@@ -604,6 +818,23 @@ class _ReportesScreenState extends State<ReportesScreen> {
                 );
               },
             ),
+
+             const SizedBox(height: 12,),
+
+             if (_userRole == 'admin')
+
+             _buildDrawerItem(
+              icon: Icons.menu_book,
+              title: 'Gestion Administrador',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AdminApprovalsScreen()),
+                );
+                },
+            ),
+
             const SizedBox(height: 12),
             _buildDrawerItem(
               icon: Icons.assignment,
@@ -614,7 +845,37 @@ class _ReportesScreenState extends State<ReportesScreen> {
               padding: EdgeInsets.symmetric(vertical: 16.0),
               child: Divider(color: Color(0xFFF2D6BD), thickness: 1),
             ),
-            
+            ..._gradosFiltros.map((grado) {
+              bool isSelected = _gradoSeleccionadoFiltro == grado;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10.0),
+                child: Material(
+                  color: isSelected ? const Color(0xFFD4B598) : _accentColor,
+                  borderRadius: BorderRadius.circular(12),
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _gradoSeleccionadoFiltro = grado;
+                      });
+                      Navigator.pop(context);
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      alignment: Alignment.center,
+                      child: Text(
+                        grado,
+                        style: TextStyle(
+                          color: _cardColor,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
             const SizedBox(height: 20),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.redAccent),
@@ -722,30 +983,36 @@ class _ReportesScreenState extends State<ReportesScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(data['razon'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                                  Text(data['tipo'] ?? '', style: TextStyle(color: Colors.grey[700], fontSize: 13)),
+                                  Text(
+                                    data['razon'] ?? '',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(data['tipo'] ?? '', style: TextStyle(color: Colors.grey[700], fontSize: 12)),
                                 ],
                               ),
                             ),
+                            const SizedBox(width: 8),
                             Expanded(
                               flex: 2,
                               child: Text(
                                 nombresAlumnos.join(', '),
-                                style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                style: const TextStyle(fontSize: 12, color: Colors.black87),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            const SizedBox(width: 8),
                             Expanded(
                               flex: 3,
                               child: Text(
                                 data['descripcion'] ?? '',
-                                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            // Botón de ver detalles
                             IconButton(
                               icon: const Icon(Icons.visibility, color: Colors.teal, size: 20),
                               tooltip: 'Ver detalles',
@@ -805,7 +1072,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
           child: Row(
             children: [
               Icon(icon, color: _cardColor, size: 26),
-              const SizedBox(width: 14),
+              const SizedBox(width: 14),  
               Text(
                 title,
                 style: TextStyle(

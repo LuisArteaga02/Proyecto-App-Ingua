@@ -354,17 +354,7 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
         centerTitle: true,
         iconTheme: IconThemeData(color: _accentColor),
         actions: [
-          if (_userRole == 'admin')
-            IconButton(
-              icon: Icon(Icons.mark_email_unread, color: _accentColor),
-              tooltip: 'Solicitudes pendientes',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const AdminApprovalsScreen()),
-                );
-              },
-            ),
+         
           if (_userRole != 'guest' && _gradoSeleccionadoFiltro != 'Todos')
             IconButton(
               icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
@@ -421,6 +411,22 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
                 Navigator.pop(context);
               },
             ),
+
+            const SizedBox(height: 12,),
+
+             if (_userRole == 'admin')
+
+             _buildDrawerItem(
+              icon: Icons.menu_book,
+              title: 'Gestion Administrador',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AdminApprovalsScreen()),
+                );
+                },
+            ),
             const SizedBox(height: 12),
 
             _buildDrawerItem(
@@ -439,6 +445,7 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
                     MaterialPageRoute(builder: (context) => const ReportesScreen()),
                   );
                 },
+                
             ),
             
             const Padding(
