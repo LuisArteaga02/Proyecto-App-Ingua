@@ -17,7 +17,7 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
   String _searchQuery = '';
   String _userRole = 'guest';
   String _userEmail = '';
-
+String _userName = 'Usuario';
   // Grado seleccionado actualmente desde el Drawer (sincronizado con los nombres del guardado)
   String _gradoSeleccionadoFiltro = 'Todos';
 
@@ -42,20 +42,26 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
     _obtenerDatosUsuario();
   }
 
-  void _obtenerDatosUsuario() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
+   void _obtenerDatosUsuario() async {
+  final user = FirebaseAuth.instance.currentUser;
+  
+  if (user != null) {
+    setState(() {
+      _userEmail = user.email ?? 'Usuario';
+    });
+    
+    // Consultamos el documento del usuario en Firestore
+    final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    if (doc.exists && mounted) {
+      final data = doc.data() as Map<String, dynamic>;
       setState(() {
-        _userEmail = user.email ?? 'Usuario';
+        _userRole = data['role'] ?? 'guest';
+        // Buscamos el campo 'nombre' o 'username' en tu base de datos
+        _userName = data['nombre'] ?? data['username'] ?? user.email?.split('@')[0] ?? 'Usuario';
       });
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      if (doc.exists && mounted) {
-        setState(() {
-          _userRole = doc.data()?['role'] ?? 'guest';
-        });
-      }
     }
   }
+}
 
   @override
   void dispose() {
@@ -381,18 +387,18 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Usuario',
+                        'Bienvenido!',
                         style: TextStyle(
                           color: Color(0xFFF2D6BD),
-                          fontSize: 20,
+                          fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
-                        _userEmail,
+                        _userName,
                         style: TextStyle(
                           color: _accentColor.withOpacity(0.7),
-                          fontSize: 12,
+                          fontSize: 20,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),

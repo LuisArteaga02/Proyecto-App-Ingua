@@ -12,58 +12,71 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  
-  // Rol seleccionado por defecto
+  final TextEditingController _nombreController = TextEditingController();
   
   String _selectedRole = 'professor'; 
   bool _isLoading = false;
 
-  void _register() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _nombreController.dispose();
+    super.dispose();
+  }
 
-    if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor completa todos los campos')),
-      );
-      return;
-    }
+void _register() async {
+  final email = _emailController.text.trim();
+  final password = _passwordController.text.trim();
+  final username = _nombreController.text.trim();
 
-    setState(() => _isLoading = true);
+  if (email.isEmpty || password.isEmpty || username.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Por favor completa todos los campos')),
+    );
+    return;
+  }
 
-    try {
-      // 1. Crear usuario en Firebase Authentication
-      UserCredential userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
+  setState(() => _isLoading = true);
 
-      String uid = userCredential.user!.uid;
+  try {
+    // 1. Crear el usuario en Firebase Authentication (esto los loguea automáticamente)
+    UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
 
-      // 2. Guardar el rol en la colección 'users' de Firestore usando el UID como ID del documento
-     String initialStatus = (_selectedRole == 'professor') ? 'pending' : 'approved';
-
-// Guardar en Firestore
-    await FirebaseFirestore.instance.collection('users').doc(uid).set({
-      'uid': uid,
+    // 2. Guardar los datos en Firestore con el rol y status pendiente
+    await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
+      'nombre': username,
       'email': email,
-      'role': _selectedRole, 
-      'status': initialStatus, // 'pending' para profesores, 'approved' para invitados
+      'role': _selectedRole, // 'professor' o el que seleccione
+      'status': 'pending',   // <-- ¡Clave para que tu Login lo detecte!
       'createdAt': FieldValue.serverTimestamp(),
     });
 
-      if (!mounted) return;
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('¡Cuenta creada con éxito! Inicia sesión')),
-      );
-      Navigator.pop(context); // Regresar al login
-    } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.message}')),
-      );
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+    // 3. ¡IMPORTANTE! Cerramos sesión inmediatamente para obligarlos a pasar por el Login
+    await FirebaseAuth.instance.signOut();
+
+    if (!mounted) return;
+
+    // 4. Mostrar aviso de éxito y regresar al Login
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Cuenta registrada con éxito. Inicia sesión cuando sea aprobada.'),
+        backgroundColor: Colors.green,
+      ),
+    );
+
+    Navigator.pop(context); // Regresa a la pantalla de Login
+
+  } catch (e) {
+    setState(() => _isLoading = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error al registrarse: $e')),
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +99,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 20),
+                
+                // Campo de Nombre de Usuario
+                TextField(
+                  controller: _nombreController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre de usuario',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person),
+                  ),
+                ),
+                const SizedBox(height: 15),
+
+                // Campo de Correo
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -96,6 +122,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 const SizedBox(height: 15),
+
+                // Campo de Contraseña
                 TextField(
                   controller: _passwordController,
                   obscureText: true,

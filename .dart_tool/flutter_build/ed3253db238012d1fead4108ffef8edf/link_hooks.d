@@ -1,0 +1,1 @@
+ /home/aderm/Documentos/Proyecto-App-Ingua/.dart_tool/flutter_build/ed3253db238012d1fead4108ffef8edf/link_hooks_result.json: 

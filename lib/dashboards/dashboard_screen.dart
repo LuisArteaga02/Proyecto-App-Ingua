@@ -15,7 +15,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   String _userRole = 'guest';
   String _userEmail = '';
-
+  String _userName = 'Usuario';
   // Paleta de colores corporativa
   final Color _bgColor = const Color(0xFF1A1617);
   final Color _cardColor = const Color(0xFF4A2E35);
@@ -29,18 +29,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _cargarDatosUsuario() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
+     final user = FirebaseAuth.instance.currentUser;
+  
+  if (user != null) {
+    setState(() {
+      _userEmail = user.email ?? 'Usuario';
+    });
+    
+    // Consultamos el documento del usuario en Firestore
+    final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    if (doc.exists && mounted) {
+      final data = doc.data() as Map<String, dynamic>;
       setState(() {
-        _userEmail = user.email ?? 'Usuario';
+        _userRole = data['role'] ?? 'guest';
+        // Buscamos el campo 'nombre' o 'username' en tu base de datos
+        _userName = data['nombre'] ?? data['username'] ?? user.email?.split('@')[0] ?? 'Usuario';
       });
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      if (doc.exists && mounted) {
-        setState(() {
-          _userRole = doc.data()?['role'] ?? 'guest';
-        });
-      }
     }
+  }
   }
 
   // MODAL DE CREACIÓN RÁPIDA DE FALTA/DEMÉRITO DIRECTO EN EL DASHBOARD
@@ -74,29 +80,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Icon(Icons.person, color: _cardColor, size: 36),
                   ),
                   const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Usuario',
-                          style: TextStyle(
-                            color: Color(0xFFF2D6BD),
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
+                 Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Bienvenido!',
+                        style: TextStyle(
+                          color: Color(0xFFF2D6BD),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
                         ),
-                        Text(
-                          _userEmail,
-                          style: TextStyle(
-                            color: _accentColor.withOpacity(0.7),
-                            fontSize: 12,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        _userName,
+                        style: TextStyle(
+                          color: _accentColor.withOpacity(0.7),
+                          fontSize: 20,
                         ),
-                      ],
-                    ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
+                ),
                 ],
               ),
               const SizedBox(height: 50),
