@@ -427,6 +427,7 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
                 );
                 },
             ),
+
             const SizedBox(height: 12),
 
             _buildDrawerItem(
@@ -490,12 +491,23 @@ class _AlumnosScreenState extends State<AlumnosScreen> {
               leading: const Icon(Icons.logout, color: Colors.redAccent),
               title: const Text(
                 'Cerrar Sesión',
-                style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               onTap: () async {
+                // 1. Cerrar sesión en Firebase Auth
                 await FirebaseAuth.instance.signOut();
+
                 if (!mounted) return;
-                Navigator.popUntil(context, (route) => route.isFirst);
+
+                // 2. Limpiar todas las rutas anteriores y navegar a la pantalla de Login
+                Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  '/', // O tu ruta/pantalla de Login
+                  (route) => false,
+                );
               },
             ),
           ],

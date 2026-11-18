@@ -127,7 +127,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 );
                 },
             ),
-            
+
               const SizedBox(height: 16),
               _buildDrawerItem(
                 icon: Icons.assignment,
@@ -141,18 +141,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 },
               ),
               const Spacer(),
-              ListTile(
-                leading: const Icon(Icons.logout, color: Colors.redAccent),
-                title: const Text(
-                  'Cerrar Sesión',
-                  style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+               ListTile(
+              leading: const Icon(Icons.logout, color: Colors.redAccent),
+              title: const Text(
+                'Cerrar Sesión',
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.bold,
                 ),
-                onTap: () async {
-                  await FirebaseAuth.instance.signOut();
-                  if (!mounted) return;
-                  Navigator.popUntil(context, (route) => route.isFirst);
-                },
               ),
+              onTap: () async {
+                // 1. Cerrar sesión en Firebase Auth
+                await FirebaseAuth.instance.signOut();
+
+                if (!mounted) return;
+
+                // 2. Limpiar todas las rutas anteriores y navegar a la pantalla de Login
+                Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  '/', // O tu ruta/pantalla de Login
+                  (route) => false,
+                );
+              },
+            ),
             ],
           ),
         ),

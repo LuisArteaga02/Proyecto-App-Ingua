@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/services.dart';
+
 import '../../alumnos/screens/alumnos_screen.dart';
-import '../../auth/screens/admin_approvals_screen.dart';
+
+import 'package:pdf/widgets.dart' as pw;
+import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
 
 class ReportesScreen extends StatefulWidget {
   const ReportesScreen({super.key});
@@ -45,7 +50,10 @@ class _ReportesScreenState extends State<ReportesScreen> {
       setState(() {
         _userEmail = user.email ?? 'Usuario';
       });
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
       if (doc.exists && mounted) {
         setState(() {
           _userRole = doc.data()?['role'] ?? 'guest';
@@ -60,10 +68,313 @@ class _ReportesScreenState extends State<ReportesScreen> {
     super.dispose();
   }
 
-  final CollectionReference _reportesRef = FirebaseFirestore.instance.collection('reportes');
-  final CollectionReference _alumnosRef = FirebaseFirestore.instance.collection('alumnos');
-  final CollectionReference _tiposFaltaRef = FirebaseFirestore.instance.collection('tipos_falta');
-  final CollectionReference _razonesRef = FirebaseFirestore.instance.collection('razones_falta');
+  Future<void> _exportarReportePdf(Map<String, dynamic> data) async {
+    final pdf = pw.Document();
+
+    // 1. CARGAR EL LOGOTIPO DESDE LOS ASSETS DE FLUTTER
+    pw.MemoryImage? logoImage;
+    try {
+      final imageByteData = await rootBundle.load('assets/logo.png');
+      logoImage = pw.MemoryImage(imageByteData.buffer.asUint8List());
+    } catch (e) {
+      // Si no encuentra la imagen, continúa sin romper la app
+      logoImage = null;
+    }
+
+    final String razon = data['razon'] ?? 'Sin Razón';
+    final String tipo = data['tipo'] ?? 'Falta Leve';
+    final String descripcion =
+        data['descripcion'] ?? 'Sin descripción adicional.';
+    final String publicadoPor = data['creadoPor'] ?? 'No especificado';
+    final List<dynamic> alumnos = data['alumnosNombres'] ?? [];
+    final String grado = data['grado'] ?? 'No especificado';
+
+    // Colores institucionales
+    final primaryColor = PdfColor.fromHex('#4A2E35');
+    final accentColor = PdfColor.fromHex('#F2D6BD');
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.all(40),
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // ==========================================
+              // DISEÑO DEL MEMBRETE INSTITUCIONAL
+              // ==========================================
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  // Lado izquierdo: Logo y Datos de la Institución
+                  pw.Row(
+                    children: [
+                      if (logoImage != null) ...[
+                        pw.Container(
+                          width: 45,
+                          height: 45,
+                          child: pw.Image(logoImage),
+                        ),
+                        pw.SizedBox(width: 12),
+                      ],
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'Instituto Nacional',
+                            style: pw.TextStyle(
+                              fontSize: 10,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                          pw.Text(
+                            'San Jose Guayabal',
+                            style: pw.TextStyle(
+                              fontSize: 18,
+                              fontWeight: pw.FontWeight.bold,
+                              color: primaryColor,
+                            ),
+                          ),
+                          pw.Text(
+                            'Sistema de Control Disciplinario',
+                            style: const pw.TextStyle(
+                              fontSize: 9,
+                              color: PdfColors.grey600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+
+                  // Lado derecho: Etiqueta de Tipo de Falta y Fecha
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: pw.BoxDecoration(
+                      color: primaryColor,
+                      borderRadius: const pw.BorderRadius.all(
+                        pw.Radius.circular(6),
+                      ),
+                    ),
+                    child: pw.Text(
+                      tipo.toUpperCase(),
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.white,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              pw.SizedBox(height: 12),
+              // Línea divisoria elegante con el color de acento
+              pw.Divider(color: accentColor, thickness: 2.5),
+              pw.SizedBox(height: 15),
+
+              // ==========================================
+              // CONTENIDO DEL REPORTE
+              // ==========================================
+              pw.Row(
+                children: [
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'GRADO / SECCIÓN:',
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            color: PdfColors.grey600,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          grado,
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            fontWeight: pw.FontWeight.bold,
+                            color: primaryColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'REGISTRADO POR:',
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            color: PdfColors.grey600,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          publicadoPor,
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            fontWeight: pw.FontWeight.bold,
+                            color: primaryColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              pw.SizedBox(height: 15),
+
+              pw.Text(
+                'ALUMNOS INVOLUCRADOS',
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: primaryColor,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: const pw.BorderRadius.all(
+                    pw.Radius.circular(6),
+                  ),
+                  border: pw.Border.all(color: PdfColors.grey300),
+                ),
+                child: pw.Text(
+                  alumnos.join(', '),
+                  style: pw.TextStyle(
+                    fontSize: 12,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.black,
+                  ),
+                ),
+              ),
+
+              pw.SizedBox(height: 12),
+
+              pw.Text(
+                'MOTIVO ESPECÍFICO',
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: primaryColor,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                razon,
+                style: const pw.TextStyle(fontSize: 12, color: PdfColors.black),
+              ),
+
+              pw.SizedBox(height: 12),
+
+              pw.Text(
+                'OBSERVACIONES DEL INCIDENTE',
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: primaryColor,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  borderRadius: const pw.BorderRadius.all(
+                    pw.Radius.circular(6),
+                  ),
+                  border: pw.Border.all(color: PdfColors.grey400),
+                ),
+                child: pw.Text(
+                  descripcion,
+                  style: const pw.TextStyle(
+                    fontSize: 11,
+                    color: PdfColors.grey800,
+                  ),
+                ),
+              ),
+
+              pw.Spacer(),
+
+              // FIRMAS
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                children: [
+                  pw.Column(
+                    children: [
+                      pw.Container(
+                        width: 180,
+                        child: pw.Divider(color: primaryColor, thickness: 1.5),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        'Firma del Docente',
+                        style: pw.TextStyle(
+                          fontSize: 9,
+                          fontWeight: pw.FontWeight.bold,
+                          color: primaryColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                  pw.Column(
+                    children: [
+                      pw.Container(
+                        width: 180,
+                        child: pw.Divider(color: primaryColor, thickness: 1.5),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        'Sello / Dirección',
+                        style: pw.TextStyle(
+                          fontSize: 9,
+                          fontWeight: pw.FontWeight.bold,
+                          color: primaryColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'reporte_disciplinario.pdf',
+    );
+  }
+
+  final CollectionReference _reportesRef = FirebaseFirestore.instance
+      .collection('reportes');
+  final CollectionReference _alumnosRef = FirebaseFirestore.instance.collection(
+    'alumnos',
+  );
+  final CollectionReference _tiposFaltaRef = FirebaseFirestore.instance
+      .collection('tipos_falta');
+  final CollectionReference _razonesRef = FirebaseFirestore.instance.collection(
+    'razones_falta',
+  );
 
   // MODAL PARA MOSTRAR DETALLES EXTENSOS DEL REPORTE
   void _mostrarDetalleReporte(Map<String, dynamic> data) {
@@ -72,7 +383,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
     final String publicadoPor = data['creadoPor'] ?? 'No especificado';
 
     Color badgeColor;
-    if (tipo.toLowerCase().contains('demerito') || tipo.toLowerCase().contains('demérito')) {
+    if (tipo.toLowerCase().contains('demerito') ||
+        tipo.toLowerCase().contains('demérito')) {
       badgeColor = Colors.redAccent;
     } else if (tipo.toLowerCase().contains('grave')) {
       badgeColor = Colors.orangeAccent;
@@ -111,7 +423,10 @@ class _ReportesScreenState extends State<ReportesScreen> {
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: badgeColor.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
@@ -119,7 +434,11 @@ class _ReportesScreenState extends State<ReportesScreen> {
                     ),
                     child: Text(
                       tipo,
-                      style: TextStyle(color: badgeColor, fontWeight: FontWeight.bold, fontSize: 11),
+                      style: TextStyle(
+                        color: badgeColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 ],
@@ -127,16 +446,28 @@ class _ReportesScreenState extends State<ReportesScreen> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Icon(Icons.person_pin, color: _accentColor.withOpacity(0.8), size: 18),
+                  Icon(
+                    Icons.person_pin,
+                    color: _accentColor.withOpacity(0.8),
+                    size: 18,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     'Publicado por: ',
-                    style: TextStyle(color: _accentColor.withOpacity(0.7), fontSize: 12, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: _accentColor.withOpacity(0.7),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   Expanded(
                     child: Text(
                       publicadoPor,
-                      style: TextStyle(color: _accentColor, fontSize: 12, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: _accentColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -145,7 +476,11 @@ class _ReportesScreenState extends State<ReportesScreen> {
               const SizedBox(height: 16),
               Text(
                 'Alumnos Involucrados:',
-                style: TextStyle(color: _accentColor, fontWeight: FontWeight.bold, fontSize: 14),
+                style: TextStyle(
+                  color: _accentColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
               const SizedBox(height: 10),
               Wrap(
@@ -153,7 +488,10 @@ class _ReportesScreenState extends State<ReportesScreen> {
                 runSpacing: 8,
                 children: nombresAlumnos.map((nombre) {
                   return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: _darkCardColor,
                       borderRadius: BorderRadius.circular(20),
@@ -166,14 +504,24 @@ class _ReportesScreenState extends State<ReportesScreen> {
                           radius: 12,
                           backgroundColor: _accentColor,
                           child: Text(
-                            nombre.toString().isNotEmpty ? nombre.toString()[0].toUpperCase() : '?',
-                            style: TextStyle(color: _cardColor, fontSize: 11, fontWeight: FontWeight.bold),
+                            nombre.toString().isNotEmpty
+                                ? nombre.toString()[0].toUpperCase()
+                                : '?',
+                            style: TextStyle(
+                              color: _cardColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           nombre.toString(),
-                          style: TextStyle(color: _accentColor, fontSize: 13, fontWeight: FontWeight.w500),
+                          style: TextStyle(
+                            color: _accentColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ],
                     ),
@@ -183,7 +531,11 @@ class _ReportesScreenState extends State<ReportesScreen> {
               const SizedBox(height: 18),
               Text(
                 'Descripción del Incidente:',
-                style: TextStyle(color: _accentColor, fontWeight: FontWeight.bold, fontSize: 14),
+                style: TextStyle(
+                  color: _accentColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
               const SizedBox(height: 6),
               Container(
@@ -194,10 +546,14 @@ class _ReportesScreenState extends State<ReportesScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  (data['descripcion'] == null || data['descripcion'].toString().trim().isEmpty)
+                  (data['descripcion'] == null ||
+                          data['descripcion'].toString().trim().isEmpty)
                       ? 'Sin descripción adicional.'
                       : data['descripcion'],
-                  style: TextStyle(color: _accentColor.withOpacity(0.9), fontSize: 13),
+                  style: TextStyle(
+                    color: _accentColor.withOpacity(0.9),
+                    fontSize: 13,
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
@@ -209,7 +565,10 @@ class _ReportesScreenState extends State<ReportesScreen> {
                     foregroundColor: _cardColor,
                   ),
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cerrar', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'Cerrar',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
             ],
@@ -219,8 +578,11 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
-  // DIÁLOGO PARA CREAR NUEVO TIPO O RAZÓN CON CAPEO AMPLIADO A 300 CARACTERES
-  void _mostrarDialogoAgregarOpcion({required bool esTipoFalta, String? tipoFaltaAsociado}) {
+  // DIÁLOGO PARA CREAR NUEVO TIPO O RAZÓN CON CAPEO DE 300 CARACTERES
+  void _mostrarDialogoAgregarOpcion({
+    required bool esTipoFalta,
+    String? tipoFaltaAsociado,
+  }) {
     final TextEditingController controladorInput = TextEditingController();
     bool guardandoOpcion = false;
 
@@ -237,22 +599,33 @@ class _ReportesScreenState extends State<ReportesScreen> {
             controller: controladorInput,
             style: TextStyle(color: _accentColor),
             maxLines: 3,
-            maxLength: 300, // Límite ampliado a 300 caracteres
+            maxLength: 300,
             decoration: InputDecoration(
-              labelText: esTipoFalta ? 'Nombre (ej. Falta Gravísima)' : 'Razón detallada...',
+              labelText: esTipoFalta
+                  ? 'Nombre (ej. Falta Gravísima)'
+                  : 'Razón detallada...',
               labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
               filled: true,
               fillColor: _darkCardColor,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
             ),
           ),
           actions: [
             TextButton(
               onPressed: guardandoOpcion ? null : () => Navigator.pop(context),
-              child: Text('Cancelar', style: TextStyle(color: _accentColor.withOpacity(0.6))),
+              child: Text(
+                'Cancelar',
+                style: TextStyle(color: _accentColor.withOpacity(0.6)),
+              ),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: _accentColor, foregroundColor: _cardColor),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accentColor,
+                foregroundColor: _cardColor,
+              ),
               onPressed: guardandoOpcion
                   ? null
                   : () async {
@@ -273,12 +646,21 @@ class _ReportesScreenState extends State<ReportesScreen> {
                       if (!mounted) return;
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('¡Opción agregada exitosamente!')),
+                        const SnackBar(
+                          content: Text('¡Opción agregada exitosamente!'),
+                        ),
                       );
                     },
               child: guardandoOpcion
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text(
+                      'Guardar',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
             ),
           ],
         ),
@@ -290,9 +672,11 @@ class _ReportesScreenState extends State<ReportesScreen> {
   void _showReporteDialog({String? docId, Map<String, dynamic>? currentData}) {
     if (_userRole == 'guest') return;
 
-    final TextEditingController descripcionController =
-        TextEditingController(text: currentData?['descripcion'] ?? '');
-    final TextEditingController buscarAlumnoModalController = TextEditingController();
+    final TextEditingController descripcionController = TextEditingController(
+      text: currentData?['descripcion'] ?? '',
+    );
+    final TextEditingController buscarAlumnoModalController =
+        TextEditingController();
 
     String? tipoSeleccionado = currentData?['tipo'];
     String? razonSeleccionada = currentData?['razon'];
@@ -337,13 +721,19 @@ class _ReportesScreenState extends State<ReportesScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      docId == null ? 'Registrar Falta o Demérito' : 'Actualizar Reporte',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _accentColor),
+                      docId == null
+                          ? 'Registrar Falta o Demérito'
+                          : 'Actualizar Reporte',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: _accentColor,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 20),
 
-                    // COMBO BOX TIPO DE FALTA (Completo al abrir / Ajustado al cerrar)
+                    // COMBO BOX TIPO DE FALTA
                     StreamBuilder<QuerySnapshot>(
                       stream: _tiposFaltaRef.snapshots(),
                       builder: (context, snapshot) {
@@ -351,11 +741,15 @@ class _ReportesScreenState extends State<ReportesScreen> {
                         if (snapshot.hasData) {
                           for (var doc in snapshot.data!.docs) {
                             final nombre = doc['nombre'] ?? '';
-                            if (nombre.isNotEmpty) listaNombresTipos.add(nombre);
+                            if (nombre.isNotEmpty)
+                              listaNombresTipos.add(nombre);
                           }
                         }
 
-                        if ((tipoSeleccionado == null || !listaNombresTipos.contains(tipoSeleccionado)) &&
+                        if ((tipoSeleccionado == null ||
+                                !listaNombresTipos.contains(
+                                  tipoSeleccionado,
+                                )) &&
                             listaNombresTipos.isNotEmpty) {
                           tipoSeleccionado = listaNombresTipos.first;
                         }
@@ -371,7 +765,9 @@ class _ReportesScreenState extends State<ReportesScreen> {
                                 menuMaxHeight: 300,
                                 decoration: InputDecoration(
                                   labelText: 'Tipo de Falta',
-                                  labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
+                                  labelStyle: TextStyle(
+                                    color: _accentColor.withOpacity(0.7),
+                                  ),
                                   filled: true,
                                   fillColor: _darkCardColor,
                                   border: OutlineInputBorder(
@@ -380,7 +776,9 @@ class _ReportesScreenState extends State<ReportesScreen> {
                                   ),
                                 ),
                                 selectedItemBuilder: (BuildContext context) {
-                                  return listaNombresTipos.map<Widget>((String item) {
+                                  return listaNombresTipos.map<Widget>((
+                                    String item,
+                                  ) {
                                     return Align(
                                       alignment: Alignment.centerLeft,
                                       child: Text(
@@ -392,18 +790,27 @@ class _ReportesScreenState extends State<ReportesScreen> {
                                     );
                                   }).toList();
                                 },
-                                items: listaNombresTipos.map<DropdownMenuItem<String>>((String item) {
-                                  return DropdownMenuItem<String>(
-                                    value: item,
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                                      child: Text(
-                                        item,
-                                        style: TextStyle(color: _accentColor, fontSize: 14),
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
+                                items: listaNombresTipos
+                                    .map<DropdownMenuItem<String>>((
+                                      String item,
+                                    ) {
+                                      return DropdownMenuItem<String>(
+                                        value: item,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 8.0,
+                                          ),
+                                          child: Text(
+                                            item,
+                                            style: TextStyle(
+                                              color: _accentColor,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    })
+                                    .toList(),
                                 onChanged: (nuevoValor) {
                                   setStateModal(() {
                                     tipoSeleccionado = nuevoValor;
@@ -414,9 +821,15 @@ class _ReportesScreenState extends State<ReportesScreen> {
                             ),
                             const SizedBox(width: 8),
                             IconButton(
-                              icon: Icon(Icons.add_circle, color: _accentColor, size: 30),
+                              icon: Icon(
+                                Icons.add_circle,
+                                color: _accentColor,
+                                size: 30,
+                              ),
                               tooltip: 'Añadir nuevo tipo',
-                              onPressed: () => _mostrarDialogoAgregarOpcion(esTipoFalta: true),
+                              onPressed: () => _mostrarDialogoAgregarOpcion(
+                                esTipoFalta: true,
+                              ),
                             ),
                           ],
                         );
@@ -424,19 +837,25 @@ class _ReportesScreenState extends State<ReportesScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    // COMBO BOX RAZÓN ESPECÍFICA (Completo al abrir / Ajustado al cerrar)
+                    // COMBO BOX RAZÓN ESPECÍFICA
                     StreamBuilder<QuerySnapshot>(
-                      stream: _razonesRef.where('tipoFalta', isEqualTo: tipoSeleccionado).snapshots(),
+                      stream: _razonesRef
+                          .where('tipoFalta', isEqualTo: tipoSeleccionado)
+                          .snapshots(),
                       builder: (context, snapshot) {
                         List<String> listaNombresRazones = [];
                         if (snapshot.hasData) {
                           for (var doc in snapshot.data!.docs) {
                             final razon = doc['razon'] ?? '';
-                            if (razon.isNotEmpty) listaNombresRazones.add(razon);
+                            if (razon.isNotEmpty)
+                              listaNombresRazones.add(razon);
                           }
                         }
 
-                        if ((razonSeleccionada == null || !listaNombresRazones.contains(razonSeleccionada)) &&
+                        if ((razonSeleccionada == null ||
+                                !listaNombresRazones.contains(
+                                  razonSeleccionada,
+                                )) &&
                             listaNombresRazones.isNotEmpty) {
                           razonSeleccionada = listaNombresRazones.first;
                         }
@@ -445,14 +864,21 @@ class _ReportesScreenState extends State<ReportesScreen> {
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                value: listaNombresRazones.contains(razonSeleccionada) ? razonSeleccionada : null,
+                                value:
+                                    listaNombresRazones.contains(
+                                      razonSeleccionada,
+                                    )
+                                    ? razonSeleccionada
+                                    : null,
                                 dropdownColor: _darkCardColor,
                                 style: TextStyle(color: _accentColor),
                                 isExpanded: true,
                                 menuMaxHeight: 350,
                                 decoration: InputDecoration(
                                   labelText: 'Razón Específica',
-                                  labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
+                                  labelStyle: TextStyle(
+                                    color: _accentColor.withOpacity(0.7),
+                                  ),
                                   filled: true,
                                   fillColor: _darkCardColor,
                                   border: OutlineInputBorder(
@@ -461,7 +887,9 @@ class _ReportesScreenState extends State<ReportesScreen> {
                                   ),
                                 ),
                                 selectedItemBuilder: (BuildContext context) {
-                                  return listaNombresRazones.map<Widget>((String item) {
+                                  return listaNombresRazones.map<Widget>((
+                                    String item,
+                                  ) {
                                     return Align(
                                       alignment: Alignment.centerLeft,
                                       child: Text(
@@ -473,42 +901,59 @@ class _ReportesScreenState extends State<ReportesScreen> {
                                     );
                                   }).toList();
                                 },
-                                items: listaNombresRazones.map<DropdownMenuItem<String>>((String item) {
-                                  return DropdownMenuItem<String>(
-                                    value: item,
-                                    child: Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                                      decoration: BoxDecoration(
-                                        border: Border(
-                                          bottom: BorderSide(
-                                            color: _accentColor.withOpacity(0.15),
-                                            width: 0.5,
+                                items: listaNombresRazones
+                                    .map<DropdownMenuItem<String>>((
+                                      String item,
+                                    ) {
+                                      return DropdownMenuItem<String>(
+                                        value: item,
+                                        child: Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 8.0,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            border: Border(
+                                              bottom: BorderSide(
+                                                color: _accentColor.withOpacity(
+                                                  0.15,
+                                                ),
+                                                width: 0.5,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            item,
+                                            style: TextStyle(
+                                              color: _accentColor,
+                                              fontSize: 13.5,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      child: Text(
-                                        item,
-                                        style: TextStyle(color: _accentColor, fontSize: 13.5),
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
+                                      );
+                                    })
+                                    .toList(),
                                 onChanged: (nuevoValor) {
-                                  setStateModal(() => razonSeleccionada = nuevoValor);
+                                  setStateModal(
+                                    () => razonSeleccionada = nuevoValor,
+                                  );
                                 },
                               ),
                             ),
                             const SizedBox(width: 8),
                             IconButton(
-                              icon: Icon(Icons.add_circle, color: _accentColor, size: 30),
+                              icon: Icon(
+                                Icons.add_circle,
+                                color: _accentColor,
+                                size: 30,
+                              ),
                               tooltip: 'Añadir nueva razón',
                               onPressed: tipoSeleccionado == null
                                   ? null
                                   : () => _mostrarDialogoAgregarOpcion(
-                                        esTipoFalta: false,
-                                        tipoFaltaAsociado: tipoSeleccionado,
-                                      ),
+                                      esTipoFalta: false,
+                                      tipoFaltaAsociado: tipoSeleccionado,
+                                    ),
                             ),
                           ],
                         );
@@ -522,16 +967,25 @@ class _ReportesScreenState extends State<ReportesScreen> {
                       maxLines: 3,
                       decoration: InputDecoration(
                         labelText: 'Descripción del incidente',
-                        labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
+                        labelStyle: TextStyle(
+                          color: _accentColor.withOpacity(0.7),
+                        ),
                         filled: true,
                         fillColor: _darkCardColor,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
                     Text(
                       'Alumnos Implicados (Selección Múltiple):',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: _accentColor, fontSize: 14),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: _accentColor,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     TextField(
@@ -544,12 +998,21 @@ class _ReportesScreenState extends State<ReportesScreen> {
                       },
                       decoration: InputDecoration(
                         hintText: 'Buscar alumno por nombre o carnet...',
-                        hintStyle: TextStyle(color: _accentColor.withOpacity(0.5)),
-                        prefixIcon: Icon(Icons.search, color: _accentColor, size: 20),
+                        hintStyle: TextStyle(
+                          color: _accentColor.withOpacity(0.5),
+                        ),
+                        prefixIcon: Icon(
+                          Icons.search,
+                          color: _accentColor,
+                          size: 20,
+                        ),
                         filled: true,
                         fillColor: _darkCardColor,
                         isDense: true,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -560,16 +1023,25 @@ class _ReportesScreenState extends State<ReportesScreen> {
                       isExpanded: true,
                       decoration: InputDecoration(
                         labelText: 'Filtrar por grado',
-                        labelStyle: TextStyle(color: _accentColor.withOpacity(0.7)),
+                        labelStyle: TextStyle(
+                          color: _accentColor.withOpacity(0.7),
+                        ),
                         filled: true,
                         fillColor: _darkCardColor,
                         isDense: true,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                       items: gradosModalLista.map((String grado) {
                         return DropdownMenuItem<String>(
                           value: grado,
-                          child: Text(grado, style: TextStyle(color: _accentColor), overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            grado,
+                            style: TextStyle(color: _accentColor),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         );
                       }).toList(),
                       onChanged: (String? nuevoValor) {
@@ -590,23 +1062,39 @@ class _ReportesScreenState extends State<ReportesScreen> {
                           stream: _alumnosRef.orderBy('nombre').snapshots(),
                           builder: (context, snapshot) {
                             if (!snapshot.hasData) {
-                              return const Center(child: CircularProgressIndicator());
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
                             }
-                            final alumnosDocs = snapshot.data!.docs.where((doc) {
+                            final alumnosDocs = snapshot.data!.docs.where((
+                              doc,
+                            ) {
                               final data = doc.data() as Map<String, dynamic>;
-                              final nombre = (data['nombre'] ?? '').toLowerCase();
-                              final carnet = (data['carnet'] ?? '').toLowerCase();
+                              final nombre = (data['nombre'] ?? '')
+                                  .toLowerCase();
+                              final carnet = (data['carnet'] ?? '')
+                                  .toLowerCase();
                               final gradoAlumno = (data['grado'] ?? '');
 
-                              bool cumpleGradoModal = filtroGradoModal == 'Todos' || gradoAlumno.contains(filtroGradoModal);
-                              bool cumpleBusqModal = nombre.contains(filtroBusquedaModal) || carnet.contains(filtroBusquedaModal);
+                              bool cumpleGradoModal =
+                                  filtroGradoModal == 'Todos' ||
+                                  gradoAlumno.contains(filtroGradoModal);
+                              bool cumpleBusqModal =
+                                  nombre.contains(filtroBusquedaModal) ||
+                                  carnet.contains(filtroBusquedaModal);
 
                               return cumpleGradoModal && cumpleBusqModal;
                             }).toList();
 
                             if (alumnosDocs.isEmpty) {
                               return Center(
-                                child: Text('No se encontraron alumnos', style: TextStyle(color: _accentColor.withOpacity(0.6), fontSize: 13)),
+                                child: Text(
+                                  'No se encontraron alumnos',
+                                  style: TextStyle(
+                                    color: _accentColor.withOpacity(0.6),
+                                    fontSize: 13,
+                                  ),
+                                ),
                               );
                             }
 
@@ -614,15 +1102,32 @@ class _ReportesScreenState extends State<ReportesScreen> {
                               itemCount: alumnosDocs.length,
                               itemBuilder: (context, index) {
                                 final alumnoDoc = alumnosDocs[index];
-                                final alumnoData = alumnoDoc.data() as Map<String, dynamic>;
+                                final alumnoData =
+                                    alumnoDoc.data() as Map<String, dynamic>;
                                 final alumnoId = alumnoDoc.id;
-                                final alumnoNombre = alumnoData['nombre'] ?? 'Sin nombre';
+                                final alumnoNombre =
+                                    alumnoData['nombre'] ?? 'Sin nombre';
                                 final alumnoGrado = alumnoData['grado'] ?? '';
-                                final isSelected = alumnosSeleccionados.contains(alumnoId);
+                                final isSelected = alumnosSeleccionados
+                                    .contains(alumnoId);
 
                                 return CheckboxListTile(
-                                  title: Text(alumnoNombre, style: TextStyle(color: _accentColor, fontSize: 13), overflow: TextOverflow.ellipsis),
-                                  subtitle: Text(alumnoGrado, style: TextStyle(color: _accentColor.withOpacity(0.6), fontSize: 11), overflow: TextOverflow.ellipsis),
+                                  title: Text(
+                                    alumnoNombre,
+                                    style: TextStyle(
+                                      color: _accentColor,
+                                      fontSize: 13,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  subtitle: Text(
+                                    alumnoGrado,
+                                    style: TextStyle(
+                                      color: _accentColor.withOpacity(0.6),
+                                      fontSize: 11,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                   value: isSelected,
                                   activeColor: _accentColor,
                                   checkColor: _cardColor,
@@ -644,23 +1149,31 @@ class _ReportesScreenState extends State<ReportesScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    
-                    // BOTÓN DE GUARDAR PROTEGIDO CONTRA DOBLE CLIC (LOADING / DEBOUNCE)
+
+                    // BOTÓN DE GUARDAR PROTEGIDO CONTRA DOBLE CLIC
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _accentColor,
                         foregroundColor: _cardColor,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       onPressed: guardandoReporte
                           ? null
                           : () async {
-                              final descripcion = descripcionController.text.trim();
+                              final descripcion = descripcionController.text
+                                  .trim();
 
-                              if (razonSeleccionada == null || alumnosSeleccionados.isEmpty) {
+                              if (razonSeleccionada == null ||
+                                  alumnosSeleccionados.isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Selecciona una razón y al menos un alumno')),
+                                  const SnackBar(
+                                    content: Text(
+                                      'Selecciona una razón y al menos un alumno',
+                                    ),
+                                  ),
                                 );
                                 return;
                               }
@@ -670,10 +1183,17 @@ class _ReportesScreenState extends State<ReportesScreen> {
                               try {
                                 final alumnosQuery = await _alumnosRef.get();
                                 List<String> nombresAlumnos = [];
+                                String gradoDelAlumno = 'General'; // Grado por defecto si no se encuentra
+
                                 for (var doc in alumnosQuery.docs) {
                                   if (alumnosSeleccionados.contains(doc.id)) {
-                                    final data = doc.data() as Map<String, dynamic>;
+                                    final data =
+                                        doc.data() as Map<String, dynamic>;
                                     nombresAlumnos.add(data['nombre'] ?? '');
+                                    // Tomamos el grado del alumno seleccionado (o el primero que encuentre)
+                                    if (data['grado'] != null) {
+                                      gradoDelAlumno = data['grado'];
+                                    }
                                   }
                                 }
 
@@ -684,6 +1204,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
                                     'descripcion': descripcion,
                                     'alumnosIds': alumnosSeleccionados,
                                     'alumnosNombres': nombresAlumnos,
+                                    'grado': gradoDelAlumno, // <-- ¡Guardamos el grado aquí!
                                     'creadoPor': _userEmail,
                                     'createdAt': FieldValue.serverTimestamp(),
                                   });
@@ -694,6 +1215,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
                                     'descripcion': descripcion,
                                     'alumnosIds': alumnosSeleccionados,
                                     'alumnosNombres': nombresAlumnos,
+                                    'grado': gradoDelAlumno, // <-- Actualizamos el grado también
                                   });
                                 }
 
@@ -702,7 +1224,9 @@ class _ReportesScreenState extends State<ReportesScreen> {
                               } catch (e) {
                                 setStateModal(() => guardandoReporte = false);
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Error al guardar: $e')),
+                                  SnackBar(
+                                    content: Text('Error al guardar: $e'),
+                                  ),
                                 );
                               }
                             },
@@ -713,8 +1237,13 @@ class _ReportesScreenState extends State<ReportesScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : Text(
-                              docId == null ? 'Guardar Reporte' : 'Actualizar Reporte',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              docId == null
+                                  ? 'Guardar Reporte'
+                                  : 'Actualizar Reporte',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
                     ),
                   ],
@@ -735,11 +1264,17 @@ class _ReportesScreenState extends State<ReportesScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: _cardColor,
         title: Text('Eliminar Reporte', style: TextStyle(color: _accentColor)),
-        content: Text('¿Estás seguro de eliminar este registro?', style: TextStyle(color: _accentColor.withOpacity(0.8))),
+        content: Text(
+          '¿Estás seguro de eliminar este registro?',
+          style: TextStyle(color: _accentColor.withOpacity(0.8)),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cancelar', style: TextStyle(color: _accentColor.withOpacity(0.6))),
+            child: Text(
+              'Cancelar',
+              style: TextStyle(color: _accentColor.withOpacity(0.6)),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
@@ -748,7 +1283,10 @@ class _ReportesScreenState extends State<ReportesScreen> {
               if (!mounted) return;
               Navigator.pop(context);
             },
-            child: const Text('Eliminar', style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'Eliminar',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -814,27 +1352,12 @@ class _ReportesScreenState extends State<ReportesScreen> {
                 Navigator.pop(context);
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(builder: (context) => const AlumnosScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const AlumnosScreen(),
+                  ),
                 );
               },
             ),
-
-             const SizedBox(height: 12,),
-
-             if (_userRole == 'admin')
-
-             _buildDrawerItem(
-              icon: Icons.menu_book,
-              title: 'Gestion Administrador',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const AdminApprovalsScreen()),
-                );
-                },
-            ),
-
             const SizedBox(height: 12),
             _buildDrawerItem(
               icon: Icons.assignment,
@@ -861,7 +1384,10 @@ class _ReportesScreenState extends State<ReportesScreen> {
                     },
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       alignment: Alignment.center,
                       child: Text(
                         grado,
@@ -881,12 +1407,23 @@ class _ReportesScreenState extends State<ReportesScreen> {
               leading: const Icon(Icons.logout, color: Colors.redAccent),
               title: const Text(
                 'Cerrar Sesión',
-                style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               onTap: () async {
+                // 1. Cerrar sesión en Firebase Auth
                 await FirebaseAuth.instance.signOut();
+
                 if (!mounted) return;
-                Navigator.popUntil(context, (route) => route.isFirst);
+
+                // 2. Limpiar todas las rutas anteriores y navegar a la pantalla de Login
+                Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  '/', // O tu ruta/pantalla de Login
+                  (route) => false,
+                );
               },
             ),
           ],
@@ -904,7 +1441,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
             TextField(
               controller: _searchController,
               style: TextStyle(color: _cardColor),
-              onChanged: (value) => setState(() => _searchQuery = value.toLowerCase().trim()),
+              onChanged: (value) =>
+                  setState(() => _searchQuery = value.toLowerCase().trim()),
               decoration: InputDecoration(
                 labelText: 'Buscar por razón, descripción o alumno...',
                 labelStyle: TextStyle(color: _cardColor.withOpacity(0.6)),
@@ -920,7 +1458,9 @@ class _ReportesScreenState extends State<ReportesScreen> {
             const SizedBox(height: 16),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: _reportesRef.orderBy('createdAt', descending: true).snapshots(),
+                stream: _reportesRef
+                    .orderBy('createdAt', descending: true)
+                    .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -928,27 +1468,52 @@ class _ReportesScreenState extends State<ReportesScreen> {
 
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return const Center(
-                      child: Text('No hay reportes de faltas registrados.', style: TextStyle(color: Colors.black54)),
+                      child: Text(
+                        'No hay reportes de faltas registrados.',
+                        style: TextStyle(color: Colors.black54),
+                      ),
                     );
                   }
 
                   final docs = snapshot.data!.docs.where((doc) {
                     final data = doc.data() as Map<String, dynamic>;
                     final razon = (data['razon'] ?? '').toLowerCase();
-                    final descripcion = (data['descripcion'] ?? '').toLowerCase();
-                    
-                    final List<dynamic> nombresAlumnos = data['alumnosNombres'] ?? [];
-                    final bool coincideAlumno = nombresAlumnos.any((nombre) => nombre.toString().toLowerCase().contains(_searchQuery));
+                    final descripcion = (data['descripcion'] ?? '')
+                        .toLowerCase();
+                    final gradoReporte = (data['grado'] ?? '')
+                        .toString()
+                        .toLowerCase();
 
-                    bool cumpleBusqueda = razon.contains(_searchQuery) || 
-                                          descripcion.contains(_searchQuery) || 
-                                          coincideAlumno;
-                    return cumpleBusqueda;
+                    final List<dynamic> nombresAlumnos =
+                        data['alumnosNombres'] ?? [];
+                    final bool coincideAlumno = nombresAlumnos.any(
+                      (nombre) => nombre.toString().toLowerCase().contains(
+                        _searchQuery,
+                      ),
+                    );
+
+                    // 1. Condición de búsqueda por texto
+                    bool cumpleBusqueda =
+                        razon.contains(_searchQuery) ||
+                        descripcion.contains(_searchQuery) ||
+                        coincideAlumno;
+
+                    // 2. Condición de filtrado por grado del Drawer
+                    bool cumpleGrado =
+                        _gradoSeleccionadoFiltro == 'Todos' ||
+                        gradoReporte.contains(
+                          _gradoSeleccionadoFiltro.toLowerCase(),
+                        );
+
+                    return cumpleBusqueda && cumpleGrado;
                   }).toList();
 
                   if (docs.isEmpty) {
                     return const Center(
-                      child: Text('No se encontraron coincidencias.', style: TextStyle(color: Colors.black54)),
+                      child: Text(
+                        'No se encontraron coincidencias.',
+                        style: TextStyle(color: Colors.black54),
+                      ),
                     );
                   }
 
@@ -958,7 +1523,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
                       final doc = docs[index];
                       final data = doc.data() as Map<String, dynamic>;
                       final docId = doc.id;
-                      final List<dynamic> nombresAlumnos = data['alumnosNombres'] ?? [];
+                      final List<dynamic> nombresAlumnos =
+                          data['alumnosNombres'] ?? [];
 
                       return Container(
                         margin: const EdgeInsets.symmetric(vertical: 6),
@@ -976,60 +1542,133 @@ class _ReportesScreenState extends State<ReportesScreen> {
                         ),
                         child: Row(
                           children: [
-                            Text('${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                            const SizedBox(width: 12),
+                            Text(
+                              '${index + 1}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            // TARJETA FLEXIBLE PARA QUE EL TEXTO LARGO NUNCA ROMPA LA PANTALLA MÓVIL
                             Expanded(
-                              flex: 2,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     data['razon'] ?? '',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  Text(data['tipo'] ?? '', style: TextStyle(color: Colors.grey[700], fontSize: 12)),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Alumnos: ${nombresAlumnos.join(', ')}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black87,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    data['tipo'] ?? '',
+                                    style: TextStyle(
+                                      color: Colors.grey[700],
+                                      fontSize: 11,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                nombresAlumnos.join(', '),
-                                style: const TextStyle(fontSize: 12, color: Colors.black87),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
+                            const SizedBox(width: 4),
+                            // MENÚ DESPLEGABLE (DROPDOWN DE ACCIONES) PARA MÓVIL
+                            PopupMenuButton<String>(
+                              icon: const Icon(
+                                Icons.more_vert,
+                                color: Colors.black54,
                               ),
+                              tooltip: 'Opciones',
+                              onSelected: (value) {
+                                if (value == 'ver') {
+                                  _mostrarDetalleReporte(data);
+                                } else if (value == 'pdf') {
+                                  _exportarReportePdf(
+                                    data,
+                                  ); // <-- ¡Aquí invocamos la exportación!
+                                } else if (value == 'editar') {
+                                  _showReporteDialog(
+                                    docId: docId,
+                                    currentData: data,
+                                  );
+                                } else if (value == 'eliminar') {
+                                  _deleteReporte(docId);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'ver',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.visibility,
+                                        color: Colors.teal,
+                                        size: 18,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text('Ver detalles'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'pdf',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.picture_as_pdf,
+                                        color: Colors.orange,
+                                        size: 18,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text('Exportar a PDF'),
+                                    ],
+                                  ),
+                                ),
+                                if (_userRole != 'guest') ...[
+                                  const PopupMenuItem(
+                                    value: 'editar',
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.edit,
+                                          color: Colors.blue,
+                                          size: 18,
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text('Editar'),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'eliminar',
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.delete,
+                                          color: Colors.red,
+                                          size: 18,
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text('Eliminar'),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              flex: 3,
-                              child: Text(
-                                data['descripcion'] ?? '',
-                                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.visibility, color: Colors.teal, size: 20),
-                              tooltip: 'Ver detalles',
-                              onPressed: () => _mostrarDetalleReporte(data),
-                            ),
-                            if (_userRole != 'guest') ...[
-                              IconButton(
-                                icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-                                tooltip: 'Editar',
-                                onPressed: () => _showReporteDialog(docId: docId, currentData: data),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                tooltip: 'Eliminar',
-                                onPressed: () => _deleteReporte(docId),
-                              ),
-                            ],
                           ],
                         ),
                       );
@@ -1061,6 +1700,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
     required String title,
     required VoidCallback onTap,
   }) {
+    print('Construyendo ítem del menú lateral: $title');
     return Material(
       color: _accentColor,
       borderRadius: BorderRadius.circular(12),
@@ -1072,7 +1712,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
           child: Row(
             children: [
               Icon(icon, color: _cardColor, size: 26),
-              const SizedBox(width: 14),  
+              const SizedBox(width: 14),
               Text(
                 title,
                 style: TextStyle(
